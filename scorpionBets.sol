@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-// ScorpionBets version the first
+// ScorpionBets version the first, try 3
 /* 
-NOTES: just added the functionality to xfer chit to the contract, need to test
-and then if it works, add the functionailty to pay winnings.
+NOTES: this seems to be working.  but it approves for some reason every time?
 */
 
 pragma solidity ^0.8.0;
@@ -31,7 +30,7 @@ contract ScorpionBets is Ownable {
     address chitContract = 0x681B52f92d4b3fEAd2091ff6b5a234f493Ad2E95;
 
     //used for emitting test info
-    event Payouts(address _playerWallet, uint _payout, bool betHome);
+    //event Payouts(address _playerWallet, uint _payout, bool betHome);
 
     //the bettinCard is a ledger of all the bets in the current round
     mapping(uint => bet) private bettingCard;
@@ -40,13 +39,13 @@ contract ScorpionBets is Ownable {
     struct bet {
         uint betAmount;
         bool betHome;
-        address playerWallet;
+        address payable playerWallet;
     
     }
     
     function addBet(uint _betAmount, bool _betHome) private {
         betCount += 1;
-        bettingCard[betCount] = bet(_betAmount, _betHome, msg.sender);
+        bettingCard[betCount] = bet(_betAmount, _betHome, payable(msg.sender));
         _betHome ? (sumHomeBets += _betAmount):(sumAwayBets += _betAmount);
         totalOfBets += _betAmount;
      
@@ -87,19 +86,21 @@ contract ScorpionBets is Ownable {
         //payouts for homeWinners
         if (homeWin){
             for(uint256 i = 1; i <= betCount; i++){
-             emit Payouts(bettingCard[i].playerWallet, (bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
+                if (bettingCard[i].betHome){ transferOut(bettingCard[i].playerWallet, calculatePayout(bettingCard[i].betAmount,homeWin)); }
+             //emit Payouts(bettingCard[i].playerWallet, (bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
             }
         }
         
         //payouts for awayWinners
         if (!homeWin){
             for(uint256 i = 1; i <= betCount; i++){
-             emit Payouts(bettingCard[i].playerWallet, (!bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
+                if (!bettingCard[i].betHome){ transferOut(bettingCard[i].playerWallet, calculatePayout(bettingCard[i].betAmount,homeWin)); }
+             //emit Payouts(bettingCard[i].playerWallet, (!bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
             }
         }
         
         //cleanup
-        // needs to delete this somehow: bettingCard = [];
+        //reset contract variables for next game
         betCount = 0;
         sumHomeBets = 0;
         sumAwayBets = 0;
@@ -111,8 +112,17 @@ contract ScorpionBets is Ownable {
     //used for a tie or other problem
     function returnAllBets () public onlyOwner{
         for(uint256 i = 1; i <= betCount; i++){
-            emit Payouts(bettingCard[i].playerWallet, bettingCard[i].betAmount, bettingCard[i].betHome);
+            transferOut(bettingCard[i].playerWallet, bettingCard[i].betAmount);  
+            
+            //emit Payouts(bettingCard[i].playerWallet, bettingCard[i].betAmount, bettingCard[i].betHome);
         }
+        
+        //reset contract variables for next game
+        betCount = 0;
+        sumHomeBets = 0;
+        sumAwayBets = 0;
+        totalOfBets = 0;
+        bettingFrozen = true;
     }
     
     //used by the payWinners function to calculate payouts
@@ -122,16 +132,14 @@ contract ScorpionBets is Ownable {
     
     //for the token approval/xfer
     Token token = Token(chitContract);
-    
-    /*  I think approval happens on the token?
-    //used for approving the contract to xfer tokens
-    function approveChit(address spender, uint amount) public {
-        token.approve(spender, amount);
+   
+    //used for transfering tokens back out
+    function transferOut(address wallet, uint amount) private {
+        token.transfer(wallet, amount);
     }
-    */
-    
+
     //used to xfer wagers to/from the contract
-    function transferFrom(uint amount) public {
+    function transferFrom(uint amount) private {
         token.transferFrom(msg.sender, address(this), amount);
     }
     
@@ -140,7 +148,6 @@ contract ScorpionBets is Ownable {
         return(betCount, sumHomeBets, sumAwayBets, totalOfBets);
     }
 }
-
 /*
 
   //deposit-withdrawal functions: 
