@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-// ScorpionBets version the 4th
+// ScorpionBets version the 5th
 /* 
-NOTES: tested minimumBet and its working
-moved multiplier fix large bets...maybe
-v4.1ish
+NOTES: adding gametime cutoff and testing comments, tested
+v5ish
 */
 
 pragma solidity ^0.8.0;
@@ -30,13 +29,19 @@ contract ScorpionBets is Ownable {
     uint public sumAwayBets = 0;
     uint public totalOfBets = 0;
     bool public bettingFrozen = true;
+    // used to stop betting at gameTime, uses unixtime (https://www.unixtimestamp.com/index.php)
+    uint public gameTime = 0;
+
     //insert token contract address here...
-    address chitContract = 0x681B52f92d4b3fEAd2091ff6b5a234f493Ad2E95;
+    //Live token
+    address chitContract = 0x61fb365761e47dC9c0116AE0ead7Cb084Bc3d2C4;
+    //test token
+    //address chitContract = 0x681B52f92d4b3fEAd2091ff6b5a234f493Ad2E95;
     
     uint minimumBet = 1000000000000;  //1 microEther
 
     //used for emitting test info
-    //event Payouts(address _playerWallet, uint _payout, bool betHome);
+    //event TestOutput(address _playerWallet, uint _payout, bool betHome);
 
     //the bettinCard is a ledger of all the bets in the current round
     mapping(uint => bet) private bettingCard;
@@ -71,14 +76,16 @@ contract ScorpionBets is Ownable {
 
     function betHome(uint _betAmount) public{
         require (!bettingFrozen, "bettingFrozen");
-        require (_betAmount > minimumBet);
+        require (_betAmount > minimumBet, "bet too small");
+        require (block.timestamp < gameTime, "Game has already started");
         transferFrom(_betAmount);
         addBet(_betAmount / minimumBet, true);
     }
     
     function betAway(uint _betAmount) public{
         require (!bettingFrozen, "bettingFrozen");
-        require (_betAmount > minimumBet);
+        require (_betAmount > minimumBet, "bet too small");
+        require (block.timestamp < gameTime, "Game has already started");
         transferFrom(_betAmount);
         addBet(_betAmount / minimumBet, false);
     }
@@ -90,14 +97,14 @@ contract ScorpionBets is Ownable {
     }
     
     //the owner pays out all winners
-    function payWinners(bool homeWin) public onlyOwner{
+    function payWinners(bool homeWin, uint _gameTime) public onlyOwner{
     //function payWinners(bool winnerHome) public onlyOwner{    
         
         //payouts for homeWinners
         if (homeWin){
             for(uint256 i = 1; i <= betCount; i++){
                 if (bettingCard[i].betHome){ transferOut(bettingCard[i].playerWallet, calculatePayout(bettingCard[i].betAmount,homeWin)); }
-             //emit Payouts(bettingCard[i].playerWallet, (bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
+             //emit TestOutput(bettingCard[i].playerWallet, (bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
             }
         }
         
@@ -105,7 +112,7 @@ contract ScorpionBets is Ownable {
         if (!homeWin){
             for(uint256 i = 1; i <= betCount; i++){
                 if (!bettingCard[i].betHome){ transferOut(bettingCard[i].playerWallet, calculatePayout(bettingCard[i].betAmount,homeWin)); }
-             //emit Payouts(bettingCard[i].playerWallet, (!bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
+             //emit TestOutput(bettingCard[i].playerWallet, (!bettingCard[i].betHome ? (calculatePayout(bettingCard[i].betAmount,homeWin)) : 0), bettingCard[i].betHome);
             }
         }
         
@@ -116,6 +123,8 @@ contract ScorpionBets is Ownable {
         sumAwayBets = 0;
         totalOfBets = 0;
         bettingFrozen = true;
+        //set the start time for the next game
+        setGameTime(_gameTime);
         
     }
     
@@ -124,7 +133,7 @@ contract ScorpionBets is Ownable {
         for(uint256 i = 1; i <= betCount; i++){
             transferOut(bettingCard[i].playerWallet, bettingCard[i].betAmount);  
             
-            //emit Payouts(bettingCard[i].playerWallet, bettingCard[i].betAmount, bettingCard[i].betHome);
+            //emit TestOutput(bettingCard[i].playerWallet, bettingCard[i].betAmount, bettingCard[i].betHome);
         }
         
         //reset contract variables for next game
@@ -138,7 +147,7 @@ contract ScorpionBets is Ownable {
     //used by the payWinners function to calculate payouts
     function calculatePayout(uint wager, bool homeWin) view private returns (uint){
         return ((wager * (homeWin ? homeBetRatio() : awayBetRatio())) / 1000000);
-        // return (wager * (homeWin ? homeBetRatio() : awayBetRatio()));
+
     }
     
     //for the token approval/xfer
@@ -154,20 +163,14 @@ contract ScorpionBets is Ownable {
         token.transferFrom(msg.sender, address(this), amount);
     }
     
+    //used to set the gametime
+    function setGameTime(uint _gameTime) public onlyOwner{
+        gameTime = _gameTime;
+    }
+    
+
     //for testing purposes
-    function testing() view public returns (uint, uint, uint, uint){
-        return(betCount, sumHomeBets, sumAwayBets, totalOfBets);
+    function roundInfo() view public returns (uint, uint, uint, uint, uint){
+        return(betCount, sumHomeBets, sumAwayBets, totalOfBets, gameTime);
     }
 }
-© 2021 GitHub, Inc.
-Terms
-Privacy
-Security
-Status
-Docs
-Contact GitHub
-Pricing
-API
-Training
-Blog
-About
